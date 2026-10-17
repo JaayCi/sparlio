@@ -127,15 +127,54 @@ if(step8===2)content=`<h1>Monatliche Fixkosten</h1><p>Was zahlst du jeden Monat?
 if(step8===3)content=`<h1>Jährliche und periodische Rechnungen</h1><p>Wähle beliebig viele Rechnungen. Daraus berechnen wir monatliche Rücklagen.</p>${sqBillRows8()}<button class="btn secondary" onclick="sqAddBill8()">+ Weitere Rechnung</button><div class="sq-box"><strong>Serafe – Radio- und Fernsehabgabe</strong><p>Bezahlst du diese Rechnung selbst?</p>${sqSelect8('sq8-serafe',[['no','Nein'],['yes','Ja']],draft8.serafe)}<label>Zahlungsrhythmus (falls Ja)</label>${sqSelect8('sq8-serafeFrequency',[['3','Quartalsweise'],['6','Halbjährlich'],['12','Jährlich']],draft8.serafeFrequency)}${sqInput8('serafeDue','Nächste Fälligkeit (optional)',draft8.serafeDue,'date')}<p class="sq-muted">Jahresbasis: 2026 CHF 335; ab 2027 CHF 312 (ohne allfällige Zuschläge). Tatsächlichen Rechnungsbetrag bei Bedarf anpassen.</p></div>`;
 if(step8===4)content=`<h1>Deine Erinnerungen</h1><p>Maximal eine reguläre Budget-Erinnerung pro Monat, kurz nach deinem Lohntag.</p><label>Wann erinnern?</label>${sqSelect8('sq8-delay',[['1','1 Tag nach Lohntag'],['2','2 Tage nach Lohntag']],draft8.delay)}<div class="sq-box"><label><input type="checkbox" id="sq8-reminders" ${draft8.reminders?'checked':''}> Monatliche Erinnerung aktivieren</label></div><div class="sq-note"><strong>Beispiel:</strong> «Ergänze deine Angaben und bring dein Monatsbudget auf den neuesten Stand.»<p class="sq-muted">Diese HTML-Beta zeigt Erinnerungen beim Öffnen der App. Echte Hintergrund-Pushs auf dem iPhone benötigen eine installierte PWA, Benachrichtigungsberechtigung und eine Push-Infrastruktur.</p></div>`;
 el.innerHTML=`<div class="setup-step">SCHRITT ${step8+1} VON 5</div>${content}<div class="setup-actions">${step8?'<button class="btn secondary" onclick="sqStep8(-1)">Zurück</button>':'<button class="btn secondary" onclick="sqSkip8()">Überspringen</button>'}<button class="btn" onclick="${step8===4?'sqFinish8()':'sqStep8(1)'}">${step8===4?'Einrichtung abschliessen':'Weiter →'}</button></div>`}
-function sqFinish8(){sqRead8();const hadPrior=hasPrevious07||localStorage.getItem(SETUP_KEY07)==='done';if(!hadPrior){data.transactions=[];data.fixed=[];data.accounts=[];data.allocations=[];data.goals=[];data.challenges=(data.challenges||[]).map(c=>({...c,done:false}))}
-const num=x=>Math.max(0,Number(x)||0), now=Date.now();
-if(num(draft8.income))data.transactions.push({id:now+1,name:'Monatliches Einkommen (Planwert)',amount:num(draft8.income),type:'income',planned:true});
-const annualExtra={thirteenth:draft8.thirteenth==='yes',thirteenthMode:draft8.thirteenthAmount,thirteenthCustom:num(draft8.thirteenthCustom),bonus:draft8.bonus==='yes',bonusAmount:num(draft8.bonusAmount)};data.annualExtraIncome=annualExtra;
-if(num(draft8.rent))data.fixed.push({id:now+2,name:'Miete',amount:num(draft8.rent),frequency:1,category:'Wohnen',due:'',planned:true});
-if(num(draft8.health))data.fixed.push({id:now+3,name:'Krankenkasse',amount:num(draft8.health),frequency:1,category:'Versicherungen',due:'',planned:true});
-draft8.bills.forEach((b,i)=>{if(num(b.amount))data.fixed.push({id:now+100+i,displayType:b.type,name:(b.name||'').trim()||b.type,amount:num(b.amount),frequency:Number(b.frequency)||12,category:'Jahresrechnungen',due:b.due||'',planned:true})});
-if(draft8.serafe==='yes'){let yr=draft8.serafeDue?Number(draft8.serafeDue.slice(0,4)):new Date().getFullYear();let annual=yr>=2027?312:335;let f=Number(draft8.serafeFrequency)||12;data.fixed.push({id:now+500,name:'Serafe – Radio- und Fernsehabgabe',amount:Math.round(annual*f/12*100)/100,frequency:f,category:'Abgaben',due:draft8.serafeDue||'',planned:true})}
-prefs8={...prefs8,payday:draft8.payday,delay:draft8.delay,reminders:draft8.reminders,language:draft8.language,serafe:draft8.serafe,serafeFrequency:draft8.serafeFrequency};persist8();save();sqSkip8();sqReminder8()}
+function sqFinish8(){
+  // Save the completed onboarding first; do not depend on dashboard rendering
+  // to close the setup sheet.
+  const button=document.querySelector('#setupBody07 .setup-actions .btn:last-child');
+  if(button){button.disabled=true;button.textContent='Wird gespeichert…';}
+  try{
+    sqRead8();
+    const hadPrior=hasPrevious07||localStorage.getItem(SETUP_KEY07)==='done';
+    const next=JSON.parse(JSON.stringify(data));
+    if(!hadPrior){
+      next.transactions=[];next.fixed=[];next.accounts=[];
+      next.allocations=[];next.goals=[];
+      next.challenges=(next.challenges||[]).map(c=>({...c,done:false}));
+    }
+    if(!Array.isArray(next.transactions))next.transactions=[];
+    if(!Array.isArray(next.fixed))next.fixed=[];
+    const num=x=>Math.max(0,Number(x)||0),now=Date.now();
+    if(num(draft8.income))next.transactions.push({id:now+1,name:'Monatliches Einkommen (Planwert)',amount:num(draft8.income),type:'income',planned:true});
+    next.annualExtraIncome={thirteenth:draft8.thirteenth==='yes',thirteenthMode:draft8.thirteenthAmount,thirteenthCustom:num(draft8.thirteenthCustom),bonus:draft8.bonus==='yes',bonusAmount:num(draft8.bonusAmount)};
+    if(num(draft8.rent))next.fixed.push({id:now+2,name:'Miete',amount:num(draft8.rent),frequency:1,category:'Wohnen',due:'',planned:true});
+    if(num(draft8.health))next.fixed.push({id:now+3,name:'Krankenkasse',amount:num(draft8.health),frequency:1,category:'Versicherungen',due:'',planned:true});
+    draft8.bills.forEach((bill,i)=>{if(num(bill.amount))next.fixed.push({id:now+100+i,displayType:bill.type,name:(bill.name||'').trim()||bill.type,amount:num(bill.amount),frequency:Number(bill.frequency)||12,category:'Jahresrechnungen',due:bill.due||'',planned:true})});
+    if(draft8.serafe==='yes'){
+      const yr=draft8.serafeDue?Number(draft8.serafeDue.slice(0,4)):new Date().getFullYear();
+      const annual=yr>=2027?312:335,f=Number(draft8.serafeFrequency)||12;
+      next.fixed.push({id:now+500,name:'Serafe – Radio- und Fernsehabgabe',amount:Math.round(annual*f/12*100)/100,frequency:f,category:'Abgaben',due:draft8.serafeDue||'',planned:true});
+    }
+    const nextPrefs={...prefs8,payday:draft8.payday,delay:draft8.delay,reminders:draft8.reminders,language:draft8.language,serafe:draft8.serafe,serafeFrequency:draft8.serafeFrequency};
+    // Persist the complete budget before marking onboarding as finished.
+    localStorage.setItem(KEY05,JSON.stringify(next));
+    localStorage.setItem(KEY,JSON.stringify(next));
+    localStorage.setItem(SQ8,JSON.stringify(nextPrefs));
+    localStorage.setItem(SQ8DONE,'done');
+    localStorage.setItem(SETUP_KEY07,'done');
+    data=next;prefs8=nextPrefs;
+    document.getElementById('setup07').classList.add('hide');
+    document.querySelectorAll('main section').forEach(el=>el.classList.add('hide'));
+    document.getElementById('home').classList.remove('hide');
+    document.querySelectorAll('[data-tab]').forEach(el=>el.classList.toggle('active',el.dataset.tab==='home'));
+    try{save();}catch(renderError){console.warn('Sparlio: rendering after setup failed',renderError);}
+    try{sqSettings8();}catch(settingsError){console.warn('Sparlio: settings render failed',settingsError);}
+    try{sqReminder8();}catch(reminderError){console.warn('Sparlio: reminder failed',reminderError);}
+  }catch(error){
+    console.error('Sparlio: setup could not be saved',error);
+    alert('Einrichtung konnte nicht gespeichert werden. Bitte erneut versuchen. Deine Eingaben bleiben in dieser Maske erhalten.');
+    if(button){button.disabled=false;button.textContent='Einrichtung abschliessen';}
+  }
+}
 function sqSettings8(){const s=document.getElementById('settings');let panel=document.getElementById('sq8-panel');if(!panel){panel=document.createElement('div');panel.id='sq8-panel';s.prepend(panel)}panel.innerHTML=`<div class="card"><div class="line"><div><h2 style="margin-bottom:5px">Einnahmen verwalten</h2><p>Monatliches Einkommen anpassen oder ergänzen.</p></div><button class="btn secondary" type="button" onclick="sqOpenIncomeSettings()">Öffnen</button></div></div><div class="card"><h2>Konto & Datensicherung</h2><p>Ohne Registrierung nutzbar. Alle Daten liegen aktuell nur auf diesem Gerät. Cloud-Konto und Synchronisierung sind geplant, aber noch nicht aktiv.</p><div class="sq-actions"><button class="btn secondary" onclick="sqExport8()">Backup herunterladen</button><button class="btn secondary" onclick="document.getElementById('sq8-import').click()">Backup importieren</button></div><input type="file" id="sq8-import" accept="application/json,.json" style="display:none" onchange="sqImport8(this)"></div><div class="card"><h2>Erinnerungen</h2><label>Lohntag</label>${sqSelect8('sq8-setpay',[...Array.from({length:28},(_,i)=>[String(i+1),'Am '+(i+1)+'.']),['last','Letzter Monatstag']],prefs8.payday)}<label>Erinnerung</label>${sqSelect8('sq8-setdelay',[['1','1 Tag später'],['2','2 Tage später']],prefs8.delay)}<label><input type="checkbox" id="sq8-setrem" ${prefs8.reminders?'checked':''} style="width:auto"> Monatlich erinnern</label><button class="btn" onclick="sqSaveSettings8()">Einstellungen speichern</button><p class="sq-muted">In dieser HTML-Beta nur In-App-Erinnerungen beim Öffnen. Kein Hintergrund-Push.</p></div><div class="card"><h2>Sprache & Währung</h2><p>Währung: <strong>CHF</strong> (fest)</p><label>Sprache</label>${sqSelect8('sq8-setlang',[['de','Deutsch'],['en','English (geplant)'],['fr','Français (geplant)'],['it','Italiano (geplant)']],prefs8.language)}<p class="sq-muted">Weitere Übersetzungen folgen. Diese Beta bleibt deutschsprachig.</p></div>`}
 function sqSaveSettings8(){prefs8.payday=document.getElementById('sq8-setpay').value;prefs8.delay=document.getElementById('sq8-setdelay').value;prefs8.reminders=document.getElementById('sq8-setrem').checked;prefs8.language=document.getElementById('sq8-setlang').value;persist8();sqSettings8();alert('Einstellungen gespeichert.')}
 function sqExport8(){const blob=new Blob([JSON.stringify({version:8,data,prefs8},null,2)],{type:'application/json'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='Sparlio-ch-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
